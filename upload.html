@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upload Bill & OCR</title>
+</head>
+<body>
+    <h2>Upload Bill Image for OCR & Auto-Categorization</h2>
+    <form id="uploadForm" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="file" id="imageUpload" name="image" accept="image/*" required>
+        <button type="submit">Process</button>
+    </form>
+
+    <br>
+    <canvas id="canvas" style="border:1px solid black;"></canvas>
+
+    <h3>OCR & Categorized Items:</h3>
+    <pre id="ocrOutput"></pre>
+
+    <script>
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+        const imageUpload = document.getElementById("imageUpload");
+        const ocrOutput = document.getElementById("ocrOutput");
+
+        let img = new Image();
+        let rectangles = [];
+        let startX, startY, isDrawing = false;
+        let currentRect = null;
+
+        // Load uploaded image into canvas
+        imageUpload.addEventListener("change", function (e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                img.onload = function () {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    redraw();
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Mouse down → start rectangle
+        canvas.addEventListener("mousedown", (e) => {
+            const rect = canvas.getBoundingClientRect();
+            startX = e.clientX - rect.left;
+            startY = e.clientY - rect.top;
+            isDrawing = true;
+        });
+
+        // Mouse move → update rectangle preview
+        canvas.addEventListener("mousemove", (e) => {
+            if (!isDrawing) return;
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const x = Math.min(startX, mouseX);
+            const y = Math.min(startY, mouseY);
+            const width = Math.abs(startX - mouseX);
+            const height = Math.abs(startY - mouseY);
+
+            currentRect = { x, y, width, height };
+            redraw();
+            drawCurrentRect();
+        });
+
+        // Mouse up → finalize rectangle
+        canvas.addEventListener("mouseup", (e) => {
+            if (!isDrawing) return;
+            rectangles.push(currentRect);
+            currentRect = null;
+            redraw();
+            isDrawing = false;
+        });
+
+        // Draw all finalized rectangles
+        function redraw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (img.src) ctx.drawImage(img, 0, 0);
+
+            ctx.strokeStyle = "red";
+            ctx.lineWidth = 2;
+            rectangles.forEach(r => ctx.strokeRect(r.x, r.y, r.width, r.height));
+        }
+
+        // Draw the rectangle currently being drawn
+        function drawCurrentRect() {
+            if (!currentRect) return;
+            ctx.strokeStyle = "blue";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(currentRect.x, currentRect.y, currentRect.width, currentRect.height);
+        }
+
+        // Submit form + rectangles to Django
+        document.getElementById("uploadForm").addEventListener("submit", function (e) {
+            e.preventDefault();
+            if (rectangles.length === 0) {
+                alert("Please draw rectangles on the image first!");
+                return;
+            }
+
+            const fileInput = document.getElementById("imageUpload");
+            const formData = new FormData();
+            formData.append("image", fileInput.files[0]);
+            formData.append("rectangles", JSON.stringify(rectangles));
+
+            fetch("{% url 'upload_image' %}", {
+                method: "POST",
+                headers: { "X-CSRFToken": "{{ csrf_token }}" },
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                ocrOutput.textContent = JSON.stringify(data, null, 4);
+            })
+            .catch(err => console.error(err));
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,946 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Finance Tracker</title>
+   </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="{% static 'finance/layout.css' %}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Personal Finance Tracker</h1>
+            <p>Track your expenses, manage your budget, and achieve your financial goals</p>
+        </div>
+
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="showTab('dashboard')">Dashboard</button>
+            <button class="nav-tab" onclick="showTab('add-expense')">Add Expense</button>
+            <button class="nav-tab" onclick="showTab('borrow-lend')">Borrow & Lend</button>
+            <button class="nav-tab" onclick="showTab('transactions')">Transactions</button>
+        </div>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboard" class="tab-content active">
+            <div class="stats-grid">
+                <div class="stat-card income">
+                    <div class="stat-value" id="totalIncome">$0</div>
+                    <div class="stat-label">Total Income</div>
+                </div>
+                <div class="stat-card expense">
+                    <div class="stat-value" id="totalExpense">$0</div>
+                    <div class="stat-label">Total Expenses</div>
+                </div>
+                <div class="stat-card savings">
+                    <div class="stat-value" id="totalSavings">$0</div>
+                    <div class="stat-label">Net Savings</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="borrowLendBalance">$0</div>
+                    <div class="stat-label">Borrow/Lend Balance</div>
+                </div>
+            </div>
+
+            <div class="charts-container">
+                <div class="chart-card">
+                    <h3 class="chart-title">Expense Categories</h3>
+                    <div class="chart-container">
+                        <canvas id="expenseChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <h3 class="chart-title">Monthly Trend</h3>
+                    <div class="chart-container">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Add Expense Tab -->
+<div id="add-expense" class="tab-content">
+    <div class="form-container">
+        <h2>Add New Expense</h2>
+        <!-- IMPORTANT: add enctype & method for file upload -->
+        <form id="expenseForm" method="post" enctype="multipart/form-data" action="{% url 'dashboard' %}">
+            {% csrf_token %}
+            
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="expenseItem">Expense Item</label>
+                    <input type="text" id="expenseItem" name="expenseItem" required>
+                </div>
+                <div class="form-group">
+                    <label for="expenseAmount">Amount ($)</label>
+                    <input type="number" id="expenseAmount" name="expenseAmount" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label for="expenseType">Type</label>
+                    <select id="expenseType" name="expenseType" required>
+                        <option value="">Select Type</option>
+                        <option value="Expense">Expense</option>
+                        <option value="Income">Income</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="expenseCategory">Category</label>
+                    <select id="expenseCategory" name="expenseCategory" required>
+                        {% for c in categories %}
+                            <option value="{{ c.id }}">{{ c.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="expenseDate">Date</label>
+                    <input type="date" id="expenseDate" name="expenseDate" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="expenseNotes">Notes (Optional)</label>
+                <textarea id="expenseNotes" name="expenseNotes" rows="3"></textarea>
+            </div>
+
+            <!-- Add Transaction button ABOVE file upload -->
+            <div class="form-group">
+                <button type="submit" class="btn btn-primary">Add Transaction</button>
+            </div>
+    </form>
+<script src="{% static 'finance/categories.js' %}"></script>
+
+    <form id="uploadForm" method="post" enctype="multipart/form-data">
+        <br><h3>OR </h3>
+        {% csrf_token %}
+            <!-- Upload Bill Image (last item now) -->
+            <div class="form-group">
+                <label for="billImage">Upload Bill Image</label>
+                <div class="file-upload">
+                    <input type="file"  id="imageUpload" name="bill_image" accept="image/*">
+                    <div class="file-upload-btn">
+                        <span>📷 Click to upload bill image</span>
+                        <br><small>OCR will auto-categorize</small>
+                    </div>
+                </div>
+            </div> 
+            <canvas id="canvas" style="border:1px solid black;"></canvas><br>
+             <button type="submit" class="btn btn-primary">Process</button>     
+        </form>
+        
+       
+         <br>
+        
+                   
+                <script>
+                                const canvas = document.getElementById("canvas");
+                                const ctx = canvas.getContext("2d");
+                                const imageUpload = document.getElementById("imageUpload");
+                                const ocrOutput = document.getElementById("ocrOutput");
+
+                                let img = new Image();
+                                let rectangles = [];
+                                let startX, startY, isDrawing = false;
+                                let currentRect = null;
+
+                                // Load uploaded image into canvas
+                                imageUpload.addEventListener("change", function (e) {
+                                    const file = e.target.files[0];
+                                    if (!file) return;
+
+                                    const reader = new FileReader();
+                                    reader.onload = function (event) {
+                                        img.onload = function () {
+                                            canvas.width = img.width;
+                                            canvas.height = img.height;
+                                            redraw();
+                                        };
+                                        img.src = event.target.result;
+                                    };
+                                    reader.readAsDataURL(file);
+                                });
+
+                                // Mouse down → start rectangle
+                                canvas.addEventListener("mousedown", (e) => {
+                                    const rect = canvas.getBoundingClientRect();
+                                    startX = e.clientX - rect.left;
+                                    startY = e.clientY - rect.top;
+                                    isDrawing = true;
+                                });
+
+                                // Mouse move → update rectangle preview
+                                canvas.addEventListener("mousemove", (e) => {
+                                    if (!isDrawing) return;
+                                    const rect = canvas.getBoundingClientRect();
+                                    const mouseX = e.clientX - rect.left;
+                                    const mouseY = e.clientY - rect.top;
+
+                                    const x = Math.min(startX, mouseX);
+                                    const y = Math.min(startY, mouseY);
+                                    const width = Math.abs(startX - mouseX);
+                                    const height = Math.abs(startY - mouseY);
+
+                                    currentRect = { x, y, width, height };
+                                    redraw();
+                                    drawCurrentRect();
+                                });
+
+                                // Mouse up → finalize rectangle
+                                canvas.addEventListener("mouseup", (e) => {
+                                    if (!isDrawing) return;
+                                    rectangles.push(currentRect);
+                                    currentRect = null;
+                                    redraw();
+                                    isDrawing = false;
+                                });
+
+                                // Draw all finalized rectangles
+                                function redraw() {
+                                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                                    if (img.src) ctx.drawImage(img, 0, 0);
+
+                                    ctx.strokeStyle = "red";
+                                    ctx.lineWidth = 2;
+                                    rectangles.forEach(r => ctx.strokeRect(r.x, r.y, r.width, r.height));
+                                }
+
+                                // Draw the rectangle currently being drawn
+                                function drawCurrentRect() {
+                                    if (!currentRect) return;
+                                    ctx.strokeStyle = "blue";
+                                    ctx.lineWidth = 2;
+                                    ctx.strokeRect(currentRect.x, currentRect.y, currentRect.width, currentRect.height);
+                                }
+
+                                // Submit form + rectangles to Django
+                                document.getElementById("uploadForm").addEventListener("submit", function (e) {
+                                    e.preventDefault();
+                                    if (rectangles.length === 0) {
+                                        alert("Please draw rectangles on the image first!");
+                                        return;
+                                    }
+
+                                    const fileInput = document.getElementById("imageUpload");
+                                    const formData = new FormData();
+                                    formData.append("image", fileInput.files[0]);
+                                    formData.append("rectangles", JSON.stringify(rectangles));
+
+                                    fetch("{% url 'upload_image' %}", {
+                                        method: "POST",
+                                        headers: { "X-CSRFToken": "{{ csrf_token }}" },
+                                        body: formData
+                                    })
+                                    .then(res => res.json())
+                                    .then(data => {
+                                        ocrOutput.textContent = JSON.stringify(data, null, 4);
+                                    })
+                                    .catch(err => console.error(err));
+                                });
+            </script>
+        
+    </div>
+</div>
+
+
+        <!-- Borrow & Lend Tab -->
+        <div id="borrow-lend" class="tab-content">
+            <div class="form-container">
+                <h2>Borrow & Lend Money</h2>
+                <form id="borrowLendForm">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="personName">Person Name</label>
+                            <input type="text" id="personName" name="personName" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="blAmount">Amount ($)</label>
+                            <input type="number" id="blAmount" name="blAmount" step="0.01" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="blType">Type</label>
+                            <select id="blType" name="blType" required>
+                                <option value="">Select Type</option>
+                                <option value="borrowed">I Borrowed (Owe Money)</option>
+                                <option value="lent">I Lent (Others Owe Me)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="blDate">Date</label>
+                            <input type="date" id="blDate" name="blDate" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="dueDate">Due Date (Optional)</label>
+                            <input type="date" id="dueDate" name="dueDate">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="blReason">Reason/Notes</label>
+                        <textarea id="blReason" name="blReason" rows="3"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Add Record</button>
+                </form>
+            </div>
+
+            <div class="transactions-table">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Person</th>
+                            <th>Amount</th>
+                            <th>Type</th>
+                            <th>Date</th>
+                            <th>Due Date</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="borrowLendTable">
+                        <tr>
+                            <td colspan="7" class="empty-state">
+                                <h3>No Records Found</h3>
+                                <p>Add your first borrow/lend record above</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Transactions Tab -->
+        <div id="transactions" class="tab-content">
+            <div class="transactions-table">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Amount</th>
+                            <th>Category</th>
+                            <th>Type</th>
+                            <th>Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactionsTable">
+                    {% for expense in expenses %}
+                           <tr id="row-{{ expense.id }}"
+                                    data-item_name="{{ expense.item_name }}"
+                                    data-amount="{{ expense.amount }}"
+                                    data-type="{{ expense.type }}"
+                                    data-category="{{ expense.category }}"
+                                    data-date="{{ expense.date }}">
+                                    
+                                    <td class="editable" data-field="item_name">{{ expense.item_name }}</td>
+                                    <td class="editable" data-field="amount">{{ expense.amount }}</td>
+                                    <td class="editable" data-field="type">{{ expense.type }}</td>
+                                    <td class="editable" data-field="category">{{ expense.category }}</td>
+                                    <td class="editable" data-field="date">{{ expense.date }}</td>
+                                    <td>
+                                        <button onclick="enableEdit({{ expense.id }})">✏️ Edit</button>
+                                        <button onclick="deleteExpense({{ expense.id }})">🗑️ Delete</button>
+                                    </td>
+                                </tr>
+
+                            {% empty %}
+                            <tr>
+                                <td colspan="6">No transactions yet.</td>
+                            </tr>
+                            {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+<script>
+                    // Enable inline editing
+                    function enableEdit(id) {
+                        let row = document.getElementById(`row-${id}`);
+                        let cells = row.querySelectorAll(".editable");
+
+                        cells.forEach(cell => {
+                            let field = cell.dataset.field;
+                            let value = cell.innerText;
+
+                            if (field === "date") {
+                                // Date field → calendar picker
+                                cell.innerHTML = `<input type="date" value="${row.dataset.date}" data-field="${field}">`;
+                            } else if (field === "type") {
+                                // Dropdown for Expense / Income
+                                let options = ["Expense", "Income"];
+                                let select = `<select data-field="${field}">`;
+                                options.forEach(opt => {
+                                    select += `<option value="${opt}" ${opt === value ? "selected" : ""}>${opt}</option>`;
+                                });
+                                select += `</select>`;
+                                cell.innerHTML = select;
+                            } else {
+                                // Other fields → text input
+                                cell.innerHTML = `<input type="text" value="${value}" data-field="${field}">`;
+                            }
+                        });
+
+                        // Change "Edit" → "Save/Cancel"
+                        let actionCell = row.querySelector("td:last-child");
+                        actionCell.innerHTML = `
+                            <button onclick="saveEdit(${id})">💾 Save</button>
+                            <button onclick="cancelEdit(${id})">❌ Cancel</button>
+                        `;
+                    }
+
+                    // Cancel editing → restore original dataset
+                    function cancelEdit(id) {
+                        let row = document.getElementById(`row-${id}`);
+                        row.querySelectorAll(".editable").forEach(cell => {
+                            let field = cell.dataset.field;
+                            cell.innerText = row.dataset[field];
+                        });
+
+                        let actionCell = row.querySelector("td:last-child");
+                        actionCell.innerHTML = `
+                            <button onclick="enableEdit(${id})">✏️ Edit</button>
+                            <button onclick="deleteExpense(${id})">🗑️ Delete</button>
+                        `;
+                    }
+
+                    // Save edited row
+                    // Save edited row
+                function saveEdit(id) {
+                    let row = document.getElementById(`row-${id}`);
+                    let inputs = row.querySelectorAll("input, select");
+
+                    let data = {};
+                    inputs.forEach(input => {
+                        data[input.dataset.field] = input.value;
+                    });
+
+                    fetch(`/edit-expense/${id}/`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "X-CSRFToken": getCookie("csrftoken"),
+                        },
+                        body: JSON.stringify(data)
+                    })
+                    .then(res => res.json())
+                    .then(resp => {
+                        if (resp.status === "success") {
+                            // ✅ Update table cells inline (no reload)
+                            row.querySelectorAll(".editable").forEach(cell => {
+                                let field = cell.dataset.field;
+                                let newValue = data[field];
+
+                                if (field === "date") {
+                                    // Show pretty format (MMM DD, YYYY)
+                                    let dateObj = new Date(newValue);
+                                    newValue = dateObj.toLocaleDateString("en-US", {
+                                        year: "numeric",
+                                        month: "short",
+                                        day: "numeric"
+                                    });
+                                    row.dataset.date = data[field]; // store raw YYYY-MM-DD
+                                }
+
+                                cell.innerText = newValue;
+                            });
+
+                            // Restore buttons
+                            let actionCell = row.querySelector("td:last-child");
+                            actionCell.innerHTML = `
+                                <button onclick="enableEdit(${id})">✏️ Edit</button>
+                                <button onclick="deleteExpense(${id})">🗑️ Delete</button>
+                            `;
+                        } else {
+                            alert("Error: " + resp.message);
+                        }
+                    });
+                }
+
+
+                    // Delete transaction
+                    function deleteExpense(id) {
+                        if (!confirm("Are you sure you want to delete this transaction?")) return;
+
+                        fetch(`/delete-expense/${id}/`, {
+                            method: "DELETE",
+                            headers: { "X-CSRFToken": getCookie("csrftoken") },
+                        })
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.status === "success") {
+                                document.getElementById(`row-${id}`).remove();
+                            } else {
+                                alert("Error: " + data.message);
+                            }
+                        });
+                    }
+
+                    // CSRF helper
+                    function getCookie(name) {
+                        let cookieValue = null;
+                        if (document.cookie && document.cookie !== "") {
+                            const cookies = document.cookie.split(";");
+                            for (let cookie of cookies) {
+                                cookie = cookie.trim();
+                                if (cookie.startsWith(name + "=")) {
+                                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                                    break;
+                                }
+                            }
+                        }
+                        return cookieValue;
+                    }
+</script>
+
+
+
+    
+    {% comment %} This is for the Income and expense Categories {% endcomment %}
+
+
+<script src="{% static 'finance/categories.js' %}"></script>
+    {% comment %} <select id="category" required></select> {% endcomment %}
+
+<script>
+        // Global data storage - now empty
+    
+        let borrowLendRecords = [];
+       
+
+        // Tab switching functionality
+        function showTab(tabName) {
+            // Hide all tab contents
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(tab => tab.classList.remove('active'));
+            
+            // Remove active class from all tabs
+            const navTabs = document.querySelectorAll('.nav-tab');
+            navTabs.forEach(tab => tab.classList.remove('active'));
+            
+            // Show selected tab content
+            document.getElementById(tabName).classList.add('active');
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+        }
+
+        // Notification system
+        function showNotification(message, type = 'success') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.classList.add('show');
+            }, 100);
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => {
+                    document.body.removeChild(notification);
+                }, 300);
+            }, 3000);
+        }
+
+        // Initialize charts with empty data
+      
+
+
+        
+        // Update charts with current data
+    function updateCharts() {
+        fetch("/get_chart_data/")
+        .then(response => response.json())
+        .then(data => {
+            console.log("📊 Chart Data:", data);
+
+            // Expense Categories Pie Chart
+            expenseChart.data.labels = Object.keys(data.categories);
+            expenseChart.data.datasets[0].data = Object.values(data.categories);
+
+            // Monthly Trend Chart
+            trendChart.data.labels = data.months;
+            trendChart.data.datasets[0].data = data.income;   // Income
+            trendChart.data.datasets[1].data = data.expense;  // Expense
+
+            expenseChart.update();
+            trendChart.update();
+        })
+        .catch(error => console.error("Error fetching chart data:", error));
+}
+
+
+        // Handle expense form submission
+        function getCookie(name) {
+             let cookieValue = null;
+                if (document.cookie && document.cookie !== "") {
+                    const cookies = document.cookie.split(";");
+            for (let cookie of cookies) {
+                cookie = cookie.trim();
+            if (cookie.startsWith(name + "=")) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+                }
+            }
+        }   
+                 return cookieValue;
+    }
+
+        document.getElementById("expenseForm").addEventListener("submit", function(e) {
+            e.preventDefault();
+
+    const data = {
+        item_name: document.getElementById("expenseItem").value,
+        amount: document.getElementById("expenseAmount").value,
+        type: document.getElementById("expenseType").value,
+        category: document.getElementById("expenseCategory").value,
+        date: document.getElementById("expenseDate").value
+    };
+
+    fetch("/add_expense/", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCookie("csrftoken")
+        },
+        body: JSON.stringify(data)
+    })
+    .then(res => res.json())
+    .then(result => {
+        if (result.status === "success") {
+            alert("✅ Expense saved: " + result.item_name);
+        } else {
+            alert("❌ Error: " + result.message);
+        }
+    })
+    .catch(err => console.error("Error:", err));
+});
+     
+
+        // Handle borrow/lend form submission
+        document.getElementById('borrowLendForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const blData = {
+                person: formData.get('personName'),
+                amount: parseFloat(formData.get('blAmount')),
+                type: formData.get('blType'),
+                date: formData.get('blDate'),
+                dueDate: formData.get('dueDate'),
+                reason: formData.get('blReason'),
+                status: 'pending'
+            };
+
+            borrowLendRecords.unshift({
+                id: Date.now(),
+                ...blData
+            });
+
+            updateBorrowLendTable();
+            updateDashboardStats();
+            this.reset();
+            
+            showNotification('Borrow/Lend record added successfully!', 'success');
+        });
+
+        // Update transactions table
+        function updateTransactionsTable() {
+            const tbody = document.getElementById('transactionsTable');
+            
+            if (transactions.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="empty-state">
+                            <h3>No Transactions Found</h3>
+                            <p>Add your first transaction to get started</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = transactions.map(t => {
+                const categoryBadge = getCategoryBadge(t.category);
+                const amountClass = t.type === 'income' ? 'amount-positive' : 'amount-negative';
+                const amountSign = t.type === 'income' ? '+' : '-';
+                
+                return `
+                    <tr>
+                        <td>${t.date}</td>
+                        <td>${t.item}</td>
+                        <td>${categoryBadge}</td>
+                        <td>${t.type.charAt(0).toUpperCase() + t.type.slice(1)}</td>
+                        <td class="${amountClass}">${amountSign}$${t.amount.toFixed(2)}</td>
+                        <td><button class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="deleteTransaction(${t.id})">Delete</button></td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Update borrow/lend table
+        function updateBorrowLendTable() {
+            const tbody = document.getElementById('borrowLendTable');
+            
+            if (borrowLendRecords.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="empty-state">
+                            <h3>No Records Found</h3>
+                            <p>Add your first borrow/lend record above</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = borrowLendRecords.map(bl => {
+                const amountClass = bl.type === 'lent' ? 'amount-positive' : 'amount-negative';
+                const amountSign = bl.type === 'lent' ? '+' : '-';
+                const statusBadge = bl.status === 'paid' ? 
+                    '<span class="badge" style="background: #27ae60; color: white;">Paid</span>' : 
+                    '<span class="badge" style="background: #e74c3c; color: white;">Pending</span>';
+                
+                return `
+                    <tr>
+                        <td>${bl.person}</td>
+                        <td class="${amountClass}">${amountSign}$${bl.amount.toFixed(2)}</td>
+                        <td>${bl.type.charAt(0).toUpperCase() + bl.type.slice(1)}</td>
+                        <td>${bl.date}</td>
+                        <td>${bl.dueDate || 'N/A'}</td>
+                        <td>${statusBadge}</td>
+                        <td>
+                            ${bl.status === 'pending' ? 
+                                `<button class="btn btn-primary" style="padding: 5px 10px; font-size: 12px;" onclick="markPaid(${bl.id})">Mark Paid</button>` :
+                                `<button class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="deleteBorrowLend(${bl.id})">Delete</button>`
+                            }
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Get category badge HTML
+        function getCategoryBadge(category) {
+            const badges = {
+                'food': '<span class="badge badge-food">Food</span>',
+                'transport': '<span class="badge badge-transport">Transport</span>',
+                'entertainment': '<span class="badge badge-entertainment">Entertainment</span>',
+                'healthcare': '<span class="badge badge-healthcare">Healthcare</span>',
+                'utilities': '<span class="badge badge-utilities">Utilities</span>',
+                'salary': '<span class="badge" style="background: #27ae60; color: white;">Salary</span>',
+                'freelance': '<span class="badge" style="background: #3498db; color: white;">Freelance</span>',
+                'other': '<span class="badge badge-other">Other</span>'
+            };
+            return badges[category] || badges['other'];
+        }
+
+        // Delete transaction
+        function deleteTransaction(id) {
+            if (confirm('Are you sure you want to delete this transaction?')) {
+                transactions = transactions.filter(t => t.id !== id);
+                updateTransactionsTable();
+                updateDashboardStats();
+                updateCharts();
+                showNotification('Transaction deleted successfully!', 'success');
+            }
+        }
+
+        // Delete borrow/lend record
+        function deleteBorrowLend(id) {
+            if (confirm('Are you sure you want to delete this record?')) {
+                borrowLendRecords = borrowLendRecords.filter(bl => bl.id !== id);
+                updateBorrowLendTable();
+                updateDashboardStats();
+                showNotification('Record deleted successfully!', 'success');
+            }
+        }
+
+        // Mark borrow/lend as paid
+        function markPaid(id) {
+            const record = borrowLendRecords.find(bl => bl.id === id);
+            if (record) {
+                record.status = 'paid';
+                updateBorrowLendTable();
+                updateDashboardStats();
+                showNotification('Record marked as paid!', 'success');
+            }
+        }
+
+
+
+
+        
+        // Update dashboard statistics
+        {% comment %} function updateDashboardStats() {
+            const totalIncome = transactions
+                .filter(t => t.type === 'income')
+                .reduce((sum, t) => sum + t.amount, 0);
+            
+            const totalExpense = transactions
+                .filter(t => t.type === 'expense')
+                .reduce((sum, t) => sum + t.amount, 0);
+            
+            const totalSavings = totalIncome - totalExpense;
+            
+            // Calculate borrow/lend balance
+            const borrowLendBalance = borrowLendRecords
+                .filter(bl => bl.status === 'pending')
+                .reduce((sum, bl) => {
+                    return bl.type === 'lent' ? sum + bl.amount : sum - bl.amount;
+                }, 0);
+            
+            // Update DOM elements
+            document.getElementById('totalIncome').textContent = `${totalIncome.toFixed(0)}`;
+            document.getElementById('totalExpense').textContent = `${totalExpense.toFixed(0)}`;
+            document.getElementById('totalSavings').textContent = `${totalSavings.toFixed(0)}`;
+            document.getElementById('borrowLendBalance').textContent = borrowLendBalance >= 0 ? 
+                `+${borrowLendBalance.toFixed(0)}` : 
+                `-${Math.abs(borrowLendBalance).toFixed(0)}`;
+        } {% endcomment %}
+
+
+       
+
+        // Set today's date as default
+        function setTodayAsDefault() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('expenseDate').value = today;
+            document.getElementById('blDate').value = today;
+        }
+
+        // Initialize everything when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            setTodayAsDefault();
+            updateTransactionsTable();
+            updateBorrowLendTable();
+            updateDashboardStats();
+            
+            // Initialize charts after a short delay to ensure DOM is ready
+            setTimeout(() => {
+                initCharts();
+                updateCharts();
+            }, 100);
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            if (e.altKey) {
+                switch(e.key) {
+                    case '1':
+                        e.preventDefault();
+                        document.querySelector('[onclick="showTab(\'dashboard\')"]').click();
+                        break;
+                    case '2':
+                        e.preventDefault();
+                        document.querySelector('[onclick="showTab(\'add-expense\')"]').click();
+                        break;
+                    case '3':
+                        e.preventDefault();
+                        document.querySelector('[onclick="showTab(\'borrow-lend\')"]').click();
+                        break;
+                    case '4':
+                        e.preventDefault();
+                        document.querySelector('[onclick="showTab(\'transactions\')"]').click();
+                        break;
+                }
+            }
+        });
+
+        console.log('Finance Tracker loaded successfully!');
+        console.log('Keyboard shortcuts: Alt+1 (Dashboard), Alt+2 (Add Expense), Alt+3 (Borrow/Lend), Alt+4 (Transactions)');
+
+        document.addEventListener("DOMContentLoaded", function() {
+    updateDashboardStats();   // ✅ This will run once the page is ready
+});
+
+    </script>
+
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // ===== Dashboard Stats =====
+    function updateDashboardStats() {
+        fetch("/get_totals/")
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById("totalIncome").textContent = `₹${data.total_income.toFixed(2)}`;
+                document.getElementById("totalExpense").textContent = `₹${data.total_expense.toFixed(2)}`;
+                document.getElementById("totalSavings").textContent = `₹${data.total_savings.toFixed(2)}`;
+            })
+            .catch(err => console.error("Error loading totals:", err));
+    }
+
+    // ===== Chart.js Setup =====
+    const expenseCtx = document.getElementById("expenseChart").getContext("2d");
+    const expenseChart = new Chart(expenseCtx, {
+        type: "pie",
+        data: {
+            labels: [],
+            datasets: [{
+                label: "Expenses by Category",
+                data: [],
+                backgroundColor: ["#f87171","#60a5fa","#34d399","#fbbf24","#a78bfa","#f472b6"]
+            }]
+        }
+    });
+
+    const trendCtx = document.getElementById("trendChart").getContext("2d");
+    const trendChart = new Chart(trendCtx, {
+        type: "line",
+        data: {
+            labels: [],
+            datasets: [
+                {
+                    label: "Income",
+                    data: [],
+                    borderColor: "#34d399",
+                    fill: false
+                },
+                {
+                    label: "Expenses",
+                    data: [],
+                    borderColor: "#f87171",
+                    fill: false
+                }
+            ]
+        }
+    });
+
+    // ===== Update Charts =====
+    function updateCharts() {
+        fetch("/get_chart_data/")
+            .then(res => res.json())
+            .then(data => {
+                // Category Pie Chart
+                expenseChart.data.labels = Object.keys(data.categories);
+                expenseChart.data.datasets[0].data = Object.values(data.categories);
+                expenseChart.update();
+
+                // Monthly Trend Chart
+                trendChart.data.labels = data.months;
+                trendChart.data.datasets[0].data = data.income;
+                trendChart.data.datasets[1].data = data.expense;
+                trendChart.update();
+            })
+            .catch(err => console.error("Error loading chart data:", err));
+    }
+
+    // ===== Auto-refresh on Page Load =====
+    document.addEventListener("DOMContentLoaded", function () {
+        updateDashboardStats();
+        updateCharts();
+    });
+
+    // ===== Refresh after adding a transaction =====
+    document.getElementById("expenseForm").addEventListener("submit", function (e) {
+        setTimeout(() => {
+            updateDashboardStats();
+            updateCharts();
+        }, 300); // small delay so backend saves first
+    });
+</script>
+
+</body>
+</html>
