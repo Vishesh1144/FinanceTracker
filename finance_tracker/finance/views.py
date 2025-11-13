@@ -1,275 +1,311 @@
-# views.py
-from datetime import datetime
+# finance/views.py
 import json
-from django.http import JsonResponse
+import os
+import re
+import tempfile
 import requests
-from .models import Expense
+from datetime import datetime
 from django.shortcuts import render, redirect, get_object_or_404
+from django.http import JsonResponse
 from django.db.models import Sum
+from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
-from django.contrib import messages
-from django.db.models.functions import TruncMonth
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 from PIL import Image
-import tempfile, os
 import pytesseract
 
-from django.views.decorators.http import require_http_methods
-from django.contrib.auth.decorators import login_required
+from .models import Expense, LendBorrow
 
-
-
-@login_required(login_url='login')
-def dashboard(request):
-    expenses = Expense.objects.filter(user=request.user).order_by("-date")  # latest first
-    return render(request, "finance/dashboard.html", {"expenses": expenses})   # 👈 make sure this file is in templates/
-
-def add_expense(request):
-    if request.method == "POST":
-        try:
-            data = json.loads(request.body)
-
-            raw_date = data.get("date")
-            formatted_date = None
-
-            if raw_date:
-                try:
-                    # Case: "Aug. 31, 2025"
-                    formatted_date = datetime.strptime(raw_date, "%b. %d, %Y").date()
-                except ValueError:
-                    try:
-                        # Case: already "2025-08-31"
-                        formatted_date = datetime.strptime(raw_date, "%Y-%m-%d").date()
-                    except:
-                        # Fallback: today
-                        formatted_date = datetime.today().date()
-            else:
-                formatted_date = datetime.today().date()
-
-            expense = Expense.objects.create(
-                user=request.user,
-                item_name=data.get("item_name"),
-                amount=data.get("amount"),
-                type=data.get("type"),
-                category=data.get("category"),
-                date=formatted_date,
-            )
-
-            return JsonResponse({
-                "status": "success",
-                "id": expense.id,
-                "item_name": expense.item_name,
-                "amount": str(expense.amount),
-                "type": expense.type,
-                "category": expense.category,
-                # Always send YYYY-MM-DD
-                "date": expense.date.strftime("%Y-%m-%d"),
-            })
-
-        except Exception as e:
-            return JsonResponse({"status": "error", "message": str(e)})
-
-
-#Edit at the Transaction Table
-@login_required
-# @csrf_exempt
-def edit_expense(request, expense_id):
-    if request.method == "POST":
-        expense = get_object_or_404(Expense, id=expense_id, user=request.user)
-        data = json.loads(request.body)
-
-        expense.item_name = data.get("item_name", expense.item_name)
-        expense.amount = data.get("amount", expense.amount)
-        expense.type = data.get("type", expense.type)   # 👈 this line is important
-        expense.category = data.get("category", expense.category)
-        expense.date = data.get("date", expense.date)
-        expense.save()
-
-        return JsonResponse({
-            "status": "success",
-            "item_name": expense.item_name,
-            "amount": str(expense.amount),
-            "type": expense.type,
-            "category": expense.category,
-            "date": str(expense.date),
-        })
-    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
-# Get total income, expense, savings
-def get_totals(request):
-    total_income = Expense.objects.filter(user=request.user, type="Income").aggregate(total=Sum("amount"))["total"] or 0
-    total_expense = Expense.objects.filter(user=request.user, type="Expense").aggregate(total=Sum("amount"))["total"] or 0
-    total_savings = total_income - total_expense
-
-    return JsonResponse({
-        "total_income": float(total_income),
-        "total_expense": float(total_expense),
-        "total_savings": float(total_savings),
-    })
-
-
-
-
-@require_http_methods(["DELETE"])
-def delete_expense(request, id):
-    try:
-        expense = Expense.objects.get(id=id, user=request.user)
-        expense.delete()
-        return JsonResponse({"status": "success"})
-    except Expense.DoesNotExist:
-        return JsonResponse({"status": "error", "message": "Expense not found"})
-
-#ChartFunctions
-def get_chart_data(request):
-    user = request.user  # show only current user’s data
-
-    # 📊 Expense categories breakdown
-    categories = (
-        Expense.objects.filter(user=user, type="Expense")
-        .values("category")
-        .annotate(total=Sum("amount"))
-    )
-    category_data = {c["category"]: float(c["total"]) for c in categories}
-
-    # 📈 Monthly trend (income vs expense)
-    expenses = Expense.objects.filter(user=user)
-    monthly_data = {}
-
-    for e in expenses:
-        month = e.date.strftime("%b")  # Jan, Feb, Mar...
-        if month not in monthly_data:
-            monthly_data[month] = {"Income": 0, "Expense": 0}
-        monthly_data[month][e.type] += float(e.amount)
-
-    response = {
-        "categories": category_data,
-        "months": list(monthly_data.keys()),
-        "income": [monthly_data[m]["Income"] for m in monthly_data],
-        "expense": [monthly_data[m]["Expense"] for m in monthly_data],
-    }
-
-    return JsonResponse(response)
-
-# Image OCR and Categorization (Optional)
+# === GEMINI API (CHANGE THIS) ===
 API_KEY = "AIzaSyBnXa2u-UWC2_DfKAt8jAjAxX5JvA-B2-U"
 API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={API_KEY}"
 
-def upload_image(request):
-    if request.method == "POST":
-        image_file = request.FILES.get("image")
-        rectangles_json = request.POST.get("rectangles")
-        if not image_file or not rectangles_json:
-            return JsonResponse({"error": "Missing image or rectangles"})
 
-        rectangles = json.loads(rectangles_json)
-
-        # Save image temporarily
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_file:
-            for chunk in image_file.chunks():
-                temp_file.write(chunk)
-            temp_path = temp_file.name
-
-        img = Image.open(temp_path)
-
-        # OCR outputs (expecting: [items_rect, amounts_rect])
-        ocr_texts = []
-        for rect in rectangles:
-            x, y, w, h = rect["x"], rect["y"], rect["width"], rect["height"]
-            roi = img.crop((x, y, x + w, y + h))
-            text = pytesseract.image_to_string(roi, config="--psm 6").strip()
-            ocr_texts.append(text)
-
-        os.remove(temp_path)
-
-        # Split into lines
-        items_list = ocr_texts[0].splitlines() if len(ocr_texts) > 0 else []
-        amounts_list = ocr_texts[1].splitlines() if len(ocr_texts) > 1 else []
-
-        # Clean empty lines
-        items_list = [i.strip() for i in items_list if i.strip()]
-        amounts_list = [a.strip() for a in amounts_list if a.strip()]
-
-        # Convert amounts to float if possible
-        clean_amounts = []
-        for amt in amounts_list:
-            try:
-                clean_amounts.append(float(amt.replace(",", "")))
-            except:
-                clean_amounts.append(0.0)
-
-        # Match items with amounts (zip ensures pairing)
-        results = []
-        for idx, (item_text, amount) in enumerate(zip(items_list, clean_amounts), start=1):
-            # Categorize via Gemini
-            prompt = f"Categorize the item: {item_text}. Only output one category (Groceries, Snacks, Household, Entertainment, Other)."
-            payload = {"contents":[{"parts":[{"text":prompt}]}]}
-            response = requests.post(API_URL, headers={"Content-Type": "application/json"}, json=payload)
-            if response.status_code == 200:
-                try:
-                    category = response.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-                except:
-                    category = "Other"
-            else:
-                category = "Other"
-
-            # Save to DB
-            expense = Expense.objects.create(
-                user=request.user,
-                item_name=item_text,
-                type="Expense",
-                amount=amount,
-                category=category
-            )
-
-            results.append({
-                "id": expense.id,
-                "Item": item_text,
-                "Amount": amount,
-                "Category": category
-            })
-
-        return JsonResponse(results, safe=False)
-
-    return render(request, "finance/upload.html")
-
-
-
+# AUTH
 def register_view(request):
     if request.method == "POST":
         username = request.POST["username"]
         password = request.POST["password"]
         confirm = request.POST["confirm"]
-        
         if password != confirm:
             messages.error(request, "Passwords do not match!")
             return redirect('register')
-
         if User.objects.filter(username=username).exists():
-            messages.error(request, "Username already exists!")
+            messages.error(request, "Username already taken!")
             return redirect('register')
-
-        user = User.objects.create_user(username=username, password=password)
-        user.save()
-        messages.success(request, "Account created successfully! Please log in.")
+        User.objects.create_user(username=username, password=password)
+        messages.success(request, "Account created! Please log in.")
         return redirect('login')
-    
     return render(request, "auth/register.html")
-
 
 def login_view(request):
     if request.method == "POST":
-        username = request.POST["username"]
-        password = request.POST["password"]
-
-        user = authenticate(request, username=username, password=password)
-        if user is not None:
+        user = authenticate(request, username=request.POST["username"], password=request.POST["password"])
+        if user:
             login(request, user)
-            return redirect('dashboard')  # redirect to main page
-        else:
-            messages.error(request, "Invalid username or password!")
-    
+            return redirect('dashboard')
+        messages.error(request, "Invalid credentials")
     return render(request, "auth/login.html")
-
 
 def logout_view(request):
     logout(request)
     return redirect('login')
+
+# DASHBOARD
+@login_required
+def dashboard(request):
+    expenses = Expense.objects.filter(user=request.user).order_by("-date")
+    return render(request, "finance/dashboard.html", {"expenses": expenses})
+
+# EXPENSE CRUD
+@csrf_exempt
+@login_required
+def add_expense(request):
+    if request.method != "POST": return JsonResponse({"status": "error"})
+    data = json.loads(request.body)
+    date_obj = datetime.today().date()
+    raw = data.get("date")
+    if raw:
+        try: date_obj = datetime.strptime(raw, "%Y-%m-%d").date()
+        except: pass
+
+    Expense.objects.create(
+        user=request.user,
+        item_name=data["item_name"],
+        amount=data["amount"],
+        type=data["type"],
+        category=data["category"],
+        date=date_obj
+    )
+    return JsonResponse({"status": "success"})
+
+@csrf_exempt
+@login_required
+def edit_expense(request, expense_id):
+    exp = get_object_or_404(Expense, id=expense_id, user=request.user)
+    if request.method == "POST":
+        data = json.loads(request.body)
+        exp.item_name = data.get("item_name", exp.item_name)
+        exp.amount = data.get("amount", exp.amount)
+        exp.type = data.get("type", exp.type)
+        exp.category = data.get("category", exp.category)
+        raw = data.get("date")
+        if raw:
+            try: exp.date = datetime.strptime(raw, "%Y-%m-%d").date()
+            except: pass
+        exp.save()
+        return JsonResponse({"status": "success"})
+    return JsonResponse({"status": "error"})
+
+@require_http_methods(["DELETE"])
+@login_required
+def delete_expense(request, id):
+    get_object_or_404(Expense, id=id, user=request.user).delete()
+    return JsonResponse({"status": "success"})
+
+# CHARTS & TOTALS
+@login_required
+def get_totals(request):
+    inc = Expense.objects.filter(user=request.user, type="Income").aggregate(Sum("amount"))["amount__sum"] or 0
+    exp = Expense.objects.filter(user=request.user, type="Expense").aggregate(Sum("amount"))["amount__sum"] or 0
+    return JsonResponse({
+        "total_income": float(inc),
+        "total_expense": float(exp),
+        "total_savings": float(inc - exp),
+    })
+
+@login_required
+def get_chart_data(request):
+    cats = Expense.objects.filter(user=request.user, type="Expense").values("category").annotate(total=Sum("amount"))
+    cat_data = {c["category"]: float(c["total"]) for c in cats}
+
+    months = {}
+    for e in Expense.objects.filter(user=request.user):
+        m = e.date.strftime("%b")
+        months.setdefault(m, {"Income": 0, "Expense": 0})
+        months[m][e.type] += float(e.amount)
+
+    ordered = sorted(months.items(), key=lambda x: datetime.strptime(x[0], "%b").month)
+    labels = [m[0] for m in ordered]
+    income = [m[1]["Income"] for m in ordered]
+    expense = [m[1]["Expense"] for m in ordered]
+
+    return JsonResponse({
+        "categories": cat_data,
+        "months": labels,
+        "income": income,
+        "expense": expense,
+    })
+
+# OCR UPLOAD WITH GEMINI
+@csrf_exempt
+@login_required
+# ==================== UPLOAD BILL + OCR + GEMINI SMART CATEGORIZATION ====================
+def upload_image(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=400)
+
+    image_file = request.FILES.get("image")
+    rectangles_json = request.POST.get("rectangles")
+    if not image_file or not rectangles_json:
+        return JsonResponse({"error": "Missing image or rectangles"}, status=400)
+
+    try:
+        rectangles = json.loads(rectangles_json)
+    except:
+        return JsonResponse({"error": "Invalid rectangles JSON"}, status=400)
+
+    if len(rectangles) < 2:
+        return JsonResponse({"error": "Please draw 2 rectangles (items + amounts)"}, status=400)
+
+    # Save image temporarily
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as f:
+        for chunk in image_file.chunks():
+            f.write(chunk)
+        temp_path = f.name
+
+    img = Image.open(temp_path)
+    ocr_texts = []
+    for rect in rectangles:
+        x, y, w, h = rect["x"], rect["y"], rect["width"], rect["height"]
+        cropped = img.crop((x, y, x + w, y + h))
+        text = pytesseract.image_to_string(cropped, config="--psm 6").strip()
+        ocr_texts.append(text)
+
+    os.unlink(temp_path)
+
+    # Extract items and amounts
+    items_raw = ocr_texts[0].splitlines()
+    amounts_raw = ocr_texts[1].splitlines() if len(ocr_texts) > 1 else []
+
+    items = [line.strip() for line in items_raw if line.strip()]
+    amounts = []
+    for line in amounts_raw:
+        match = re.search(r'[₹\$]?[\d,]+\.?\d*', line.replace('₹', '').replace('$', ''))
+        if match:
+            amounts.append(float(match.group(0).replace(',', '')))
+        else:
+            amounts.append(0.0)
+
+    results = []
+
+    # NEW OPEN-ENDED SMART PROMPT
+    for item_text, amount in zip(items, amounts):
+        if amount <= 0:
+            continue
+
+        prompt = f'''
+You are an expert Indian personal finance assistant.
+Item from a bill/receipt: "{item_text.strip()}"
+Amount: ₹{amount}
+
+Suggest the SINGLE best category name for this expense.
+Rules:
+- Use common, natural, short category names (e.g. "Groceries", "Fuel", "Medicines", "Dining Out", "Electricity", "Movie Ticket", "Uber", "Shopping", "Mobile Recharge")
+- Prefer specific over generic when clear (e.g. "Petrol" instead of "Travel", "Medicines" instead of "Health")
+- Keep category name 1–3 words max
+- Capitalize Each Word (Title Case)
+- Never make up items — base only on the given text
+- If totally unclear → use "Miscellaneous"
+
+Examples:
+Item: "PARACETAMOL 650MG TAB" → Medicines
+Item: "UBER AUTO RIDE" → Cab Ride
+Item: "BESCOM ELECTRICITY" → Electricity Bill
+Item: "AMUL BUTTER 500G" → Groceries
+Item: "PVR CINEMAS" → Movie
+
+Respond with ONLY the category name. No explanation.
+'''
+
+        category = "Miscellaneous"  # fallback
+        try:
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "temperature": 0.3,
+                    "topP": 0.8,
+                    "topK": 40,
+                    "maxOutputTokens": 50
+                }
+            }
+            response = requests.post(API_URL, json=payload, timeout=20)
+            if response.status_code == 200:
+                raw = response.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                # Clean up response
+                clean_category = re.sub(r'^[\W_]+|[\W_]+$','', raw.split('\n')[0]).strip()
+                if clean_category and len(clean_category) < 40:
+                    category = clean_category
+                else:
+                    category = "Miscellaneous"
+        except Exception as e:
+            print("Gemini failed:", e)
+            category = "Miscellaneous"
+
+        # Save to DB
+        expense = Expense.objects.create(
+            user=request.user,
+            item_name=item_text[:100],
+            type="Expense",
+            amount=amount,
+            category=category,               # Now dynamic!
+            date=datetime.today().date()
+        )
+        results.append({
+            "id": expense.id,
+            "Item": item_text,
+            "Amount": amount,
+            "Category": category
+        })
+
+    return JsonResponse(results, safe=False)
+
+# LEND & BORROW
+@login_required
+def get_lend_borrow(request):
+    records = LendBorrow.objects.filter(user=request.user).order_by('-date')
+    data = [{
+        "id": r.id,
+        "person": r.person,
+        "amount": float(r.amount),
+        "type": r.type,
+        "date": str(r.date),
+        "dueDate": str(r.due_date) if r.due_date else "",
+        "reason": r.reason,
+        "status": r.status,
+    } for r in records]
+    return JsonResponse({"records": data})
+
+@csrf_exempt
+@login_required
+def add_lend_borrow(request):
+    if request.method != "POST": return JsonResponse({"status": "error"})
+    data = json.loads(request.body)
+    LendBorrow.objects.create(
+        user=request.user,
+        person=data["person"],
+        amount=data["amount"],
+        type=data["type"],
+        date=data.get("date") or datetime.today().date(),
+        due_date=data.get("dueDate") or None,
+        reason=data.get("reason", ""),
+        status="pending"
+    )
+    return JsonResponse({"status": "success"})
+
+@csrf_exempt
+@login_required
+def update_lend_borrow(request, id):
+    record = get_object_or_404(LendBorrow, id=id, user=request.user)
+    if request.method == "PATCH":
+        data = json.loads(request.body)
+        record.status = data.get("status", record.status)
+        record.save()
+        return JsonResponse({"status": "success"})
+    elif request.method == "DELETE":
+        record.delete()
+        return JsonResponse({"status": "success"})
+    return JsonResponse({"status": "error"})
