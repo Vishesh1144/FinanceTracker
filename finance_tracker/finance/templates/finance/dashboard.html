@@ -7,30 +7,44 @@
     <title>Personal Finance Tracker</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="{% static 'finance/layout.css' %}">
+    <style>
+        .ocr-instructions { background:#f8f9fa; padding:15px; border-radius:10px; margin:15px 0; border-left:5px solid #3498db; }
+        .ocr-instructions ol { margin:15px 0; }
+        .ocr-instructions li { margin:8px 0; font-size:15px; }
+        .processing { opacity:0.6; pointer-events:none; }
+        .spinner { display:inline-block; width:16px; height:16px; border:2px solid #fff; border-top:2px solid transparent; border-radius:50%; animation:spin 1s linear infinite; margin-left:8px; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+        .ocr-preview { margin-top:15px; text-align:center; }
+        .ocr-preview canvas { max-width:100%; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.1); border:2px dashed #ddd; }
+        #canvasHint { color:#7f8c8d; margin-top:10px; font-style:italic; }
+        .hidden { display: none; }
+        .notification { position:fixed; top:20px; right:20px; padding:15px 25px; border-radius:8px; color:white; font-weight:500; z-index:1000; opacity:0; transition:all 0.3s; }
+        .notification.success { background:#27ae60; }
+        .notification.error { background:#e74c3c; }
+        .notification.show { opacity:1; transform:translateY(0); }
+    </style>
 </head>
 <body>
 <div class="container">
 
-    <!-- HEADER WITH USER INFO & LOGOUT -->
+    <!-- HEADER -->
     <div class="header" style="position:relative; padding: 25px 30px;">
         <h1>Personal Finance Tracker</h1>
         <div style="position:absolute; top:20px; right:30px; display:flex; align-items:center; gap:15px; color:white; font-size:16px;">
             <span>Welcome, <strong>{{ user.username|title }}</strong>!</span>
             <form action="{% url 'logout' %}" method="post" style="display:inline;">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-danger" style="padding:8px 16px; font-size:14px; margin:0;">
-                    Logout
-                </button>
+                <button type="submit" class="btn btn-danger" style="padding:8px 16px; font-size:14px; margin:0;">Logout</button>
             </form>
         </div>
     </div>
 
     <!-- Navigation -->
     <div class="nav-tabs">
-        <button class="nav-tab active" onclick="showTab('dashboard')">Dashboard</button>
-        <button class="nav-tab" onclick="showTab('add-expense')">Add Expense</button>
-        <button class="nav-tab" onclick="showTab('borrow-lend')">Borrow & Lend</button>
-        <button class="nav-tab" onclick="showTab('transactions')">Transactions</button>
+        <button class="nav-tab active" onclick="showTab(this, 'dashboard')">Dashboard</button>
+        <button class="nav-tab" onclick="showTab(this, 'add-expense')">Add Expense</button>
+        <button class="nav-tab" onclick="showTab(this, 'borrow-lend')">Borrow & Lend</button>
+        <button class="nav-tab" onclick="showTab(this, 'transactions')">Transactions</button>
     </div>
 
     <!-- DASHBOARD -->
@@ -76,18 +90,36 @@
                 <button type="submit" class="btn btn-primary">Add Transaction</button>
             </form>
 
-            <br><h3>OR – Upload Bill (OCR)</h3>
+            <br><br>
+            <h3>Upload Bill & Auto-Extract Expenses (OCR)</h3>
+            <div class="ocr-instructions">
+                <p><strong>How to use:</strong></p>
+                <ol>
+                    <li>Upload your bill image</li>
+                    <li>Draw <strong>1 rectangle</strong> over all item names</li>
+                    <li>Draw <strong>1 rectangle</strong> over all amounts</li>
+                    <li>Click "Process Image" → Done!</li>
+                </ol>
+            </div>
+
             <form id="uploadForm" enctype="multipart/form-data">
                 {% csrf_token %}
                 <div class="form-group">
-                    <label for="imageUpload">Bill Image</label>
+                    <label for="imageUpload">Bill / Receipt Image</label>
                     <div class="file-upload">
-                        <input type="file" id="imageUpload" name="image" accept="image/*">
-                        <div class="file-upload-btn">Click to upload</div>
+                        <input type="file" id="imageUpload" name="image" accept="image/*" required>
+                        <div class="file-upload-btn">Choose Image</div>
                     </div>
                 </div>
-                <canvas id="canvas" class="hidden"></canvas>
-                <button type="submit" class="btn btn-primary">Process Image</button>
+
+                <div class="ocr-preview">
+                    <canvas id="canvas" class="hidden"></canvas>
+                    <p id="canvasHint">Your image will appear here. Draw rectangles using mouse.</p>
+                </div>
+
+                <button type="submit" id="processBtn" class="btn btn-primary" style="margin-top:20px; padding:12px 30px; font-size:16px;">
+                    Process Image
+                </button>
             </form>
         </div>
     </div>
@@ -152,7 +184,7 @@
 </div>
 
 <script>
-    // CSRF Token
+    // CSRF TOKEN
     function getCookie(name) {
         let cookieValue = null;
         if (document.cookie && document.cookie !== '') {
@@ -168,17 +200,18 @@
         return cookieValue;
     }
 
-    // Tab Switching
-    function showTab(tabName) {
+    // TAB SWITCHING - FIXED
+    function showTab(button, tabName) {
         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
         document.getElementById(tabName).classList.add('active');
-        event.target.classList.add('active');
+        button.classList.add('active');
+
         if (tabName === 'borrow-lend') loadLendBorrowRecords();
         if (tabName === 'transactions') loadTransactions();
     }
 
-    // Notification
+    // NOTIFICATION
     function showNotification(msg, type = 'success') {
         const n = document.createElement('div');
         n.className = `notification ${type}`;
@@ -188,14 +221,14 @@
         setTimeout(() => { n.classList.remove('show'); setTimeout(() => n.remove(), 300); }, 3000);
     }
 
-    // Set Today
+    // TODAY DATE
     function setToday() {
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('expenseDate').value = today;
         document.getElementById('blDate').value = today;
     }
 
-    // Charts
+    // CHARTS
     const expenseChart = new Chart(document.getElementById('expenseChart'), { type: 'pie', data: { labels: [], datasets: [{ data: [], backgroundColor: ['#f87171','#60a5fa','#34d399','#fbbf24','#a78bfa','#f472b6'] }] }, options: { responsive: true } });
     const trendChart = new Chart(document.getElementById('trendChart'), { type: 'line', data: { labels: [], datasets: [{ label: 'Income', data: [], borderColor: '#34d399' }, { label: 'Expense', data: [], borderColor: '#f87171' }] }, options: { responsive: true } });
 
@@ -223,7 +256,7 @@
         });
     }
 
-    // Add Expense
+    // ADD EXPENSE
     document.getElementById('expenseForm').addEventListener('submit', function(e) {
         e.preventDefault();
         const data = {
@@ -234,13 +267,15 @@
             date: document.getElementById('expenseDate').value
         };
         fetch("/add_expense/", { method: "POST", headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken") }, body: JSON.stringify(data) })
-        .then(() => { this.reset(); setToday(); updateCategories(); updateDashboardStats(); updateCharts(); loadTransactions(); showNotification("Added!"); });
+        .then(() => { this.reset(); setToday(); updateCategories(); updateDashboardStats(); updateCharts(); loadTransactions(); showNotification("Transaction Added!"); });
     });
 
-    // OCR Canvas (unchanged)
+    // OCR - FULLY WORKING
     const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d");
     const imageUpload = document.getElementById("imageUpload");
+    const processBtn = document.getElementById("processBtn");
+    const canvasHint = document.getElementById("canvasHint");
     let img = new Image(), rectangles = [], isDrawing = false, startX, startY;
 
     imageUpload.addEventListener("change", e => {
@@ -248,58 +283,152 @@
         if (!file) return;
         const reader = new FileReader();
         reader.onload = ev => {
-            img.onload = () => { canvas.width = img.width; canvas.height = img.height; canvas.classList.remove("hidden"); redraw(); };
+            img.onload = () => {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                canvas.classList.remove("hidden");
+                canvasHint.textContent = "Draw rectangles: 1 for items, 1 for amounts";
+                redraw();
+            };
             img.src = ev.target.result;
         };
         reader.readAsDataURL(file);
     });
 
-    canvas.addEventListener("mousedown", e => { const rect = canvas.getBoundingClientRect(); startX = e.clientX - rect.left; startY = e.clientY - rect.top; isDrawing = true; });
-    canvas.addEventListener("mousemove", e => { if (!isDrawing) return; const rect = canvas.getBoundingClientRect(); const x = Math.min(startX, e.clientX - rect.left); const y = Math.min(startY, e.clientY - rect.top); const w = Math.abs(e.clientX - rect.left - startX); const h = Math.abs(e.clientY - rect.top - startY); redraw(); ctx.strokeStyle = "blue"; ctx.lineWidth = 3; ctx.strokeRect(x, y, w, h); });
-    canvas.addEventListener("mouseup", () => { if (isDrawing) { rectangles.push({ x: Math.min(startX, event.clientX - canvas.getBoundingClientRect().left), y: Math.min(startY, event.clientY - canvas.getBoundingClientRect().top), width: Math.abs(event.clientX - canvas.getBoundingClientRect().left - startX), height: Math.abs(event.clientY - canvas.getBoundingClientRect().top - startY) }); isDrawing = false; redraw(); } });
+    canvas.addEventListener("mousedown", e => {
+        const rect = canvas.getBoundingClientRect();
+        startX = e.clientX - rect.left;
+        startY = e.clientY - rect.top;
+        isDrawing = true;
+    });
 
-    function redraw() { ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(img, 0, 0); ctx.strokeStyle = "red"; ctx.lineWidth = 2; rectangles.forEach(r => ctx.strokeRect(r.x, r.y, r.width, r.height)); }
+    canvas.addEventListener("mousemove", e => {
+        if (!isDrawing) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = Math.min(startX, e.clientX - rect.left);
+        const y = Math.min(startY, e.clientY - rect.top);
+        const w = Math.abs(e.clientX - rect.left - startX);
+        const h = Math.abs(e.clientY - rect.top - startY);
+        redraw();
+        ctx.strokeStyle = "#3498db";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(x, y, w, h);
+    });
 
-    document.getElementById("uploadForm").addEventListener("submit", e => {
+    canvas.addEventListener("mouseup", e => {
+        if (isDrawing) {
+            const rect = canvas.getBoundingClientRect();
+            rectangles.push({
+                x: Math.min(startX, e.clientX - rect.left),
+                y: Math.min(startY, e.clientY - rect.top),
+                width: Math.abs(e.clientX - rect.left - startX),
+                height: Math.abs(e.clientY - rect.top - startY)
+            });
+            isDrawing = false;
+            redraw();
+            canvasHint.textContent = `Drew ${rectangles.length} rectangle(s). Ready!`;
+        }
+    });
+
+    function redraw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 2;
+        rectangles.forEach(r => ctx.strokeRect(r.x, r.y, r.width, r.height));
+    }
+
+    document.getElementById("uploadForm").addEventListener("submit", async function(e) {
         e.preventDefault();
-        if (rectangles.length === 0) return alert("Draw rectangles first!");
+        if (rectangles.length < 2) {
+            alert("Please draw at least 2 rectangles: one for items, one for amounts.");
+            return;
+        }
+
+        processBtn.disabled = true;
+        processBtn.innerHTML = 'Processing... <span class="spinner"></span>';
+
         const formData = new FormData();
         formData.append("image", imageUpload.files[0]);
         formData.append("rectangles", JSON.stringify(rectangles));
-        fetch("/upload/", { method: "POST", headers: { "X-CSRFToken": getCookie("csrftoken") }, body: formData })
-        .then(r => r.json())
-        .then(() => { showNotification("OCR Processed!"); updateDashboardStats(); updateCharts(); loadTransactions(); canvas.classList.add("hidden"); rectangles = []; imageUpload.value = ""; });
+
+        try {
+            const response = await fetch("/upload/", {
+                method: "POST",
+                headers: { "X-CSRFToken": getCookie("csrftoken") },
+                body: formData
+            });
+            const result = await response.json();
+
+            if (response.ok && Array.isArray(result)) {
+                showNotification(`Success! Added ${result.length} expense(s)!`, "success");
+                updateDashboardStats();
+                updateCharts();
+                loadTransactions();
+            } else {
+                showNotification("OCR failed. Try again.", "error");
+            }
+        } catch (err) {
+            showNotification("Network error.", "error");
+        } finally {
+            processBtn.disabled = false;
+            processBtn.innerHTML = "Process Image";
+            canvas.classList.add("hidden");
+            canvasHint.textContent = "Your image will appear here. Draw rectangles using mouse.";
+            rectangles = [];
+            imageUpload.value = "";
+        }
     });
 
-    // LEND & BORROW (unchanged)
+    // LEND & BORROW
     function loadLendBorrowRecords() {
         fetch("/lend-borrow/").then(r => r.json()).then(d => {
             const tbody = document.getElementById('borrowLendTable');
-            tbody.innerHTML = d.records.length === 0 ? `<tr><td colspan="7" class="empty-state"><h3>No Records</h3><p>Add above</p></td></tr>` : d.records.map(r => `
-                <tr>
-                    <td>${r.person}</td>
-                    <td class="${r.type==='lent'?'amount-positive':'amount-negative'}">${r.type==='lent'?'+' : '-'}₹${parseFloat(r.amount).toFixed(2)}</td>
-                    <td>${r.type.charAt(0).toUpperCase() + r.type.slice(1)}</td>
-                    <td>${r.date}</td>
-                    <td>${r.dueDate || 'N/A'}</td>
-                    <td><span class="badge" style="background:${r.type==='settled'?'#27ae60':'#e74c3c'};color:white;">${r.status.charAt(0).toUpperCase() + r.status.slice(1)}</span></td>
-                    <td>${r.status === 'pending' ? `<button class="btn btn-primary" style="padding:5px;font-size:12px;" onclick="markSettled(${r.id})">Settle</button>` : `<button class="btn btn-danger" style="padding:5px;font-size:12px;" onclick="deleteLendBorrow(${r.id})">Delete</button>`}</td>
-                </tr>
-            `).join('');
+            tbody.innerHTML = d.records.length === 0 
+                ? `<tr><td colspan="7" class="empty-state"><h3>No Records</h3><p>Add above</p></td></tr>`
+                : d.records.map(r => `
+                    <tr>
+                        <td>${r.person}</td>
+                        <td>${r.type==='lent' ? '+' : '-'}₹${parseFloat(r.amount).toFixed(2)}</td>
+                        <td>${r.type.charAt(0).toUpperCase() + r.type.slice(1)}</td>
+                        <td>${r.date}</td>
+                        <td>${r.dueDate || 'N/A'}</td>
+                        <td><span style="background:${r.status==='settled'?'#27ae60':'#e74c3c'};color:white;padding:3px 8px;border-radius:4px;">${r.status.charAt(0).toUpperCase() + r.status.slice(1)}</span></td>
+                        <td>
+                            ${r.status === 'pending' 
+                                ? `<button class="btn btn-primary" style="padding:4px 8px;font-size:11px;" onclick="markSettled(${r.id})">Settle</button>`
+                                : `<button class="btn btn-danger" style="padding:4px 8px;font-size:11px;" onclick="deleteLendBorrow(${r.id})">Delete</button>`
+                            }
+                        </td>
+                    </tr>
+                `).join('');
         });
     }
 
     document.getElementById('borrowLendForm').addEventListener('submit', function(e) {
         e.preventDefault();
-        const data = { person: document.getElementById('personName').value, amount: parseFloat(document.getElementById('blAmount').value), type: document.getElementById('blType').value, date: document.getElementById('blDate').value, dueDate: document.getElementById('dueDate').value || null, reason: document.getElementById('blReason').value };
+        const data = { 
+            person: document.getElementById('personName').value, 
+            amount: parseFloat(document.getElementById('blAmount').value), 
+            type: document.getElementById('blType').value, 
+            date: document.getElementById('blDate').value, 
+            dueDate: document.getElementById('dueDate').value || null, 
+            reason: document.getElementById('blReason').value 
+        };
         fetch("/add-lend-borrow/", { method: "POST", headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken") }, body: JSON.stringify(data) })
         .then(() => { this.reset(); setToday(); loadLendBorrowRecords(); updateDashboardStats(); showNotification("Record added!"); });
     });
 
-    function markSettled(id) { fetch(`/update-lend-borrow/${id}/`, { method: "PATCH", headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken") }, body: JSON.stringify({ status: "settled" }) }).then(() => { loadLendBorrowRecords(); updateDashboardStats(); showNotification("Settled!"); }); }
-    function deleteLendBorrow(id) { if (confirm("Delete?")) fetch(`/update-lend-borrow/${id}/`, { method: "DELETE", headers: { "X-CSRFToken": getCookie("csrftoken") } }).then(() => { loadLendBorrowRecords(); updateDashboardStats(); showNotification("Deleted!"); }); }
+    function markSettled(id) { 
+        fetch(`/update-lend-borrow/${id}/`, { method: "PATCH", headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken") }, body: JSON.stringify({ status: "settled" }) })
+        .then(() => { loadLendBorrowRecords(); updateDashboardStats(); showNotification("Settled!"); }); 
+    }
+    function deleteLendBorrow(id) { 
+        if (confirm("Delete?")) fetch(`/update-lend-borrow/${id}/`, { method: "DELETE", headers: { "X-CSRFToken": getCookie("csrftoken") } })
+        .then(() => { loadLendBorrowRecords(); updateDashboardStats(); showNotification("Deleted!"); }); 
+    }
 
-    // TRANSACTIONS (unchanged)
+    // TRANSACTIONS
     function loadTransactions() {
         fetch("/dashboard/").then(r => r.text()).then(html => {
             const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -373,14 +502,10 @@
 
     function updateCategories() {
         const selectedType = typeSelect.value;
-        let options = [];
-        if (selectedType === "Expense") options = expenseCategories;
-        else if (selectedType === "Income") options = incomeCategories;
-
+        const options = selectedType === "Expense" ? expenseCategories : incomeCategories;
         categorySelect.innerHTML = `<option value="">Select Category</option>` + 
             options.map(c => `<option value="${c}">${c}</option>`).join("");
     }
-
     typeSelect.addEventListener("change", updateCategories);
 
     // INIT
