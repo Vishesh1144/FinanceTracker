@@ -1,54 +1,157 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login - Finance Tracker</title>
   <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
     body {
-      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-      font-family: Arial, sans-serif;
-      color: #fff;
-      text-align: center;
-      margin-top: 80px;
+      min-height: 100vh;
+      /* Brighter & friendlier gradient */
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      font-family: 'Segoe UI', Arial, sans-serif;
+      color: #333;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
     }
-    form {
-      background: rgba(255, 255, 255, 0.1);
-      padding: 30px;
-      border-radius: 15px;
-      display: inline-block;
-      width: 300px;
-    }
-    input {
+    .container {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(15px);
+      padding: 45px 40px;
+      border-radius: 24px;
+      box-shadow: 0 20px 50px rgba(102, 78, 234, 0.25);
       width: 100%;
-      padding: 10px;
-      margin: 8px 0;
-      border: none;
-      border-radius: 8px;
+      max-width: 400px;
+      border: 1px solid rgba(102, 78, 234, 0.15);
+    }
+    h2 {
+      text-align: center;
+      margin-bottom: 32px;
+      font-size: 30px;
+      font-weight: 700;
+      background: linear-gradient(to right, #667eea, #764ba2);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .form-group {
+      margin-bottom: 22px;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #444;
+      font-size: 15px;
+    }
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 15px 18px;
+      border: 2px solid #e2e8f0;
+      border-radius: 14px;
+      background: #f8fafc;
+      color: #1a202c;
+      font-size: 16px;
+      transition: all 0.3s ease;
+    }
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+      background: #fff;
+      box-shadow: 0 0 0 4px rgba(102, 78, 234, 0.15);
+    }
+    input::placeholder {
+      color: #94a3b8;
+    }
+
+    /* Bright & beautiful button */
+    .button-wrapper {
+      margin-top: 10px;
     }
     button {
-      background: #667eea;
-      border: none;
-      color: #fff;
-      padding: 10px;
       width: 100%;
-      border-radius: 8px;
+      padding: 16px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border: none;
+      border-radius: 14px;
+      color: white;
+      font-size: 17px;
+      font-weight: 700;
       cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 8px 25px rgba(102, 78, 234, 0.35);
     }
     button:hover {
-      background: #764ba2;
+      transform: translateY(-4px);
+      box-shadow: 0 15px 35px rgba(102, 78, 234, 0.5);
+    }
+    button:active {
+      transform: translateY(-1px);
+    }
+
+    .login-link {
+      text-align: center;
+      margin-top: 28px;
+      font-size: 15px;
+    }
+    .login-link a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .login-link a:hover {
+      text-decoration: underline;
+    }
+
+    .messages p {
+      background: #fef3c7;
+      color: #92400e;
+      padding: 12px;
+      border-radius: 10px;
+      margin-top: 15px;
+      text-align: center;
+      font-size: 14px;
+    }
+
+    @media (max-width: 480px) {
+      .container { padding: 35px 30px; }
+      h2 { font-size: 26px; }
     }
   </style>
 </head>
 <body>
-  <h2>Login to Your Account</h2>
-  <form method="POST">
-    {% csrf_token %}
-    <input type="text" name="username" placeholder="Username" required><br>
-    <input type="password" name="password" placeholder="Password" required><br>
-    <button type="submit">Login</button>
-  </form>
-  <p>Don't have an account? <a href="{% url 'register' %}" style="color:#fff;">Register</a></p>
-  {% for message in messages %}
-    <p style="color:yellow;">{{ message }}</p>
-  {% endfor %}
+  <div class="container">
+    <h2>Welcome Back!</h2>
+    <form method="POST" novalidate>
+      {% csrf_token %}
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" name="username" id="username" placeholder="Enter your username" required>
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" name="password" id="password" placeholder="Enter your password" required>
+      </div>
+
+      <div class="button-wrapper">
+        <button type="submit">Login to Account</button>
+      </div>
+    </form>
+
+    <div class="login-link">
+      Don't have an account? <a href="{% url 'register' %}">Register here</a>
+    </div>
+
+    {% if messages %}
+      <div class="messages">
+        {% for message in messages %}
+          <p{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
 </body>
 </html>
