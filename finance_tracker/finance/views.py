@@ -23,6 +23,9 @@ from .models import Expense, LendBorrow
 API_KEY = "AIzaSyBnXa2u-UWC2_DfKAt8jAjAxX5JvA-B2-U"
 API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={API_KEY}"
 
+# LANDING PAGE
+def landing_page(request):
+    return render(request, 'lending_page\landing.html')
 
 # AUTH
 def register_view(request):

@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FinTrack - Smart Personal Finance Management</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      color: #333;
+      overflow-x: hidden;
+      background: #ffffff;
+    }
+
+    /* Navigation Bar */
+    .navbar {
+      position: fixed;
+      top: 0;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(15px);
+      padding: 20px 0;
+      box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+      z-index: 1000;
+      transition: all 0.3s ease;
+    }
+
+    .navbar.scrolled {
+      padding: 15px 0;
+      box-shadow: 0 2px 30px rgba(102, 78, 234, 0.15);
+    }
+
+    .nav-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      font-size: 28px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 30px;
+      align-items: center;
+    }
+
+    .nav-links a {
+      color: #333;
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.3s;
+    }
+
+    .nav-links a:hover {
+      color: #667eea;
+    }
+
+    .btn-nav {
+      padding: 10px 25px;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(102, 78, 234, 0.3);
+    }
+
+    .btn-nav:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 78, 234, 0.4);
+    }
+
+    /* Hero Section */
+    .hero {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 100px 40px 80px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      width: 500px;
+      height: 500px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+      top: -200px;
+      right: -200px;
+    }
+
+    .hero::after {
+      content: '';
+      position: absolute;
+      width: 400px;
+      height: 400px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+      bottom: -150px;
+      left: -150px;
+    }
+
+    .hero-content {
+      max-width: 1200px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      align-items: center;
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-text h1 {
+      font-size: 56px;
+      color: white;
+      margin-bottom: 24px;
+      line-height: 1.2;
+      font-weight: 700;
+    }
+
+    .hero-text p {
+      font-size: 20px;
+      color: rgba(255, 255, 255, 0.9);
+      margin-bottom: 40px;
+      line-height: 1.6;
+    }
+
+    .hero-buttons {
+      display: flex;
+      gap: 20px;
+    }
+
+    .btn-primary {
+      padding: 16px 40px;
+      background: white;
+      color: #667eea;
+      border-radius: 14px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 18px;
+      transition: all 0.3s ease;
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 35px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn-secondary {
+      padding: 16px 40px;
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: 2px solid white;
+      border-radius: 14px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 18px;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(10px);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: translateY(-4px);
+    }
+
+    .hero-image {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .mockup {
+      width: 100%;
+      max-width: 500px;
+      background: white;
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.3);
+      transform: perspective(1000px) rotateY(-5deg);
+      transition: transform 0.3s ease;
+    }
+
+    .mockup:hover {
+      transform: perspective(1000px) rotateY(0deg);
+    }
+
+    .mockup-screen {
+      background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+      border-radius: 10px;
+      padding: 30px;
+      min-height: 400px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .mockup-stat {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .mockup-stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: #667eea;
+    }
+
+    /* Features Section */
+    .features {
+      padding: 100px 40px;
+      background: #ffffff;
+    }
+
+    .section-title {
+      text-align: center;
+      font-size: 48px;
+      color: #2c3e50;
+      margin-bottom: 20px;
+      font-weight: 700;
+    }
+
+    .section-subtitle {
+      text-align: center;
+      font-size: 20px;
+      color: #666;
+      margin-bottom: 60px;
+    }
+
+    .features-grid {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 40px;
+    }
+
+    .feature-card {
+      background: white;
+      padding: 40px;
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      transition: all 0.3s ease;
+      border: 1px solid #f0f0f0;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-10px);
+      box-shadow: 0 20px 40px rgba(102, 78, 234, 0.2);
+    }
+
+    .feature-icon {
+      width: 70px;
+      height: 70px;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border-radius: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      margin-bottom: 24px;
+      box-shadow: 0 8px 20px rgba(102, 78, 234, 0.3);
+    }
+
+    .feature-card h3 {
+      font-size: 24px;
+      color: #2c3e50;
+      margin-bottom: 16px;
+      font-weight: 700;
+    }
+
+    .feature-card p {
+      font-size: 16px;
+      color: #666;
+      line-height: 1.8;
+    }
+
+    /* How It Works Section */
+    .how-it-works {
+      padding: 100px 40px;
+      background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    }
+
+    .steps-container {
+      max-width: 1000px;
+      margin: 0 auto;
+      display: grid;
+      gap: 30px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 80px 1fr;
+      gap: 30px;
+      align-items: start;
+    }
+
+    .step-number {
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      font-weight: 700;
+      color: white;
+      box-shadow: 0 8px 20px rgba(102, 78, 234, 0.3);
+    }
+
+    .step-content {
+      background: white;
+      padding: 30px;
+      border-radius: 15px;
+      box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+    }
+
+    .step-content h3 {
+      font-size: 24px;
+      color: #2c3e50;
+      margin-bottom: 12px;
+      font-weight: 700;
+    }
+
+    .step-content p {
+      font-size: 16px;
+      color: #666;
+      line-height: 1.8;
+    }
+
+    /* Stats Section */
+    .stats {
+      padding: 80px 40px;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+    }
+
+    .stats-grid {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 40px;
+    }
+
+    .stat-card {
+      text-align: center;
+      color: white;
+    }
+
+    .stat-number {
+      font-size: 56px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    .stat-label {
+      font-size: 18px;
+      opacity: 0.9;
+    }
+
+    /* CTA Section */
+    .cta {
+      padding: 100px 40px;
+      background: white;
+      text-align: center;
+    }
+
+    .cta h2 {
+      font-size: 48px;
+      color: #2c3e50;
+      margin-bottom: 24px;
+      font-weight: 700;
+    }
+
+    .cta p {
+      font-size: 20px;
+      color: #666;
+      margin-bottom: 40px;
+      max-width: 700px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* Footer */
+    .footer {
+      background: #2c3e50;
+      color: white;
+      padding: 40px;
+      text-align: center;
+    }
+
+    .footer p {
+      opacity: 0.8;
+      margin-bottom: 20px;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 30px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .footer-links a {
+      color: white;
+      text-decoration: none;
+      opacity: 0.8;
+      transition: opacity 0.3s;
+    }
+
+    .footer-links a:hover {
+      opacity: 1;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+      .hero-content {
+        grid-template-columns: 1fr;
+        text-align: center;
+      }
+
+      .hero-text h1 {
+        font-size: 40px;
+      }
+
+      .hero-buttons {
+        justify-content: center;
+        flex-direction: column;
+      }
+
+      .hero-image {
+        order: -1;
+      }
+
+      .mockup {
+        max-width: 100%;
+        transform: none;
+      }
+
+      .nav-links {
+        display: none;
+      }
+
+      .section-title {
+        font-size: 36px;
+      }
+
+      .step {
+        grid-template-columns: 1fr;
+        text-align: center;
+      }
+
+      .step-number {
+        margin: 0 auto;
+      }
+
+      .stat-number {
+        font-size: 40px;
+      }
+    }
+
+    /* Animations */
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .animate-fade-in {
+      animation: fadeInUp 0.8s ease-out;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <div class="logo">💰 FinTrack</div>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#how-it-works">How It Works</a>
+        <a href="{% url 'login' %}" class="btn-nav">Login</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-content">
+      <div class="hero-text animate-fade-in">
+        <h1>Take Control of Your Finances</h1>
+        <p>Track expenses, manage income, and gain insights into your spending habits with our intelligent finance tracker.</p>
+        <div class="hero-buttons">
+          <a href="{% url 'register' %}" class="btn-primary">Get Started Free</a>
+          <a href="#features" class="btn-secondary">Learn More</a>
+        </div>
+      </div>
+      <div class="hero-image">
+        <div class="mockup">
+          <div class="mockup-screen">
+            <div class="mockup-stat">
+              <span>Total Income</span>
+              <span class="mockup-stat-value">₹27,620</span>
+            </div>
+            <div class="mockup-stat">
+              <span>Total Expenses</span>
+              <span class="mockup-stat-value" style="color: #e74c3c;">₹11,945</span>
+            </div>
+            <div class="mockup-stat">
+              <span>Net Savings</span>
+              <span class="mockup-stat-value" style="color: #2ecc71;">₹15,675</span>
+            </div>
+            <div class="mockup-stat">
+              <span>Lend/Borrow</span>
+              <span class="mockup-stat-value" style="color: #3498db;">+₹500</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section class="features" id="features">
+    <h2 class="section-title">Powerful Features</h2>
+    <p class="section-subtitle">Everything you need to manage your personal finances effectively</p>
+    
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <h3>Expense Tracking</h3>
+        <p>Easily track all your expenses with detailed categorization. Know exactly where your money goes.</p>
+      </div>
+      
+      <div class="feature-card">
+        <div class="feature-icon">💵</div>
+        <h3>Income Management</h3>
+        <p>Record multiple income sources and monitor your earnings across different categories.</p>
+      </div>
+      
+      <div class="feature-card">
+        <div class="feature-icon">🤝</div>
+        <h3>Borrow & Lend</h3>
+        <p>Keep track of money borrowed or lent to friends and family with due date reminders.</p>
+      </div>
+      
+      <div class="feature-card">
+        <div class="feature-icon">📸</div>
+        <h3>Smart OCR</h3>
+        <p>Upload bill receipts and let AI automatically extract items and amounts. Save time on data entry!</p>
+      </div>
+      
+      <div class="feature-card">
+        <div class="feature-icon">📈</div>
+        <h3>Visual Analytics</h3>
+        <p>Beautiful charts and graphs give you instant insights into your spending patterns and trends.</p>
+      </div>
+      
+      <div class="feature-card">
+        <div class="feature-icon">🔒</div>
+        <h3>Secure & Private</h3>
+        <p>Your financial data is encrypted and secure. Only you have access to your information.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works -->
+  <section class="how-it-works" id="how-it-works">
+    <h2 class="section-title">How It Works</h2>
+    <p class="section-subtitle">Get started in 3 simple steps</p>
+    
+    <div class="steps-container">
+      <div class="step">
+        <div class="step-number">1</div>
+        <div class="step-content">
+          <h3>Create Your Account</h3>
+          <p>Sign up in seconds with just a username and password. No credit card required. Start tracking immediately.</p>
+        </div>
+      </div>
+      
+      <div class="step">
+        <div class="step-number">2</div>
+        <div class="step-content">
+          <h3>Add Your Transactions</h3>
+          <p>Manually enter expenses and income, or use our smart OCR feature to scan bills and receipts automatically.</p>
+        </div>
+      </div>
+      
+      <div class="step">
+        <div class="step-number">3</div>
+        <div class="step-content">
+          <h3>Get Insights</h3>
+          <p>View beautiful visualizations, track spending trends, and make smarter financial decisions based on data.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Stats Section -->
+  <section class="stats">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-number">7K+</span>
+        <span class="stat-label">Lines of Code</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-number">82.6%</span>
+        <span class="stat-label">Test Pass Rate</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-number">6</span>
+        <span class="stat-label">Core Features</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-number">100%</span>
+        <span class="stat-label">Free to Use</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section class="cta">
+    <h2>Ready to Take Control?</h2>
+    <p>Join today and start your journey towards better financial management. It's completely free!</p>
+    <a href="{% url 'register' %}" class="btn-primary" style="display: inline-block;">Create Free Account</a>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>&copy; 2025 FinTrack - Personal Finance Management System</p>
+    <div class="footer-links">
+      <a href="{% url 'login' %}">Login</a>
+      <a href="{% url 'register' %}">Register</a>
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How It Works</a>
+    </div>
+    <p style="margin-top: 20px; font-size: 14px;">Built by Vinit, Vishesh & Arun | SCET 2025</p>
+  </footer>
+
+  <script>
+    // Navbar scroll effect
+    window.addEventListener('scroll', function() {
+      const navbar = document.querySelector('.navbar');
+      if (window.scrollY > 50) {
+        navbar.classList.add('scrolled');
+      } else {
+        navbar.classList.remove('scrolled');
+      }
+    });
+
+    // Smooth scrolling for anchor links
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          target.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+          });
+        }
+      });
+    });
+  </script>
+</body>
+</html>
