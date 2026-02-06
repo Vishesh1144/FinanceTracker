@@ -6,6 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FinTrack - Personal Finance Tracker</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
     <link rel="stylesheet" href="{% static 'finance/layout.css' %}">
     <style>
         .ocr-instructions { background:#f8f9fa; padding:15px; border-radius:10px; margin:15px 0; border-left:5px solid #3498db; }
@@ -573,9 +575,28 @@ document.addEventListener('input', function(e) {
     }
 
     function deleteExpense(id) {
-        if (!confirm("Delete this expense?")) return;
-        fetch(`/delete-expense/${id}/`, { method: "DELETE", headers: { "X-CSRFToken": getCookie("csrftoken") } })
+    Swal.fire({
+    title: 'Are you sure?',
+    text: "This action cannot be undone!",
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Yes, delete it',
+    cancelButtonText: 'Cancel'
+  }).then((result) => {
+    if (result.isConfirmed) {
+       fetch(`/delete-expense/${id}/`, { method: "DELETE", headers: { "X-CSRFToken": getCookie("csrftoken") } })
         .then(() => { loadTransactions(); updateDashboardStats(); updateCharts(); showNotification("Deleted!"); });
+    }
+  }).then(() => {
+     Swal.fire({
+        title: "Deleted!",
+        text: "Expense removed successfully.",
+        icon: "success",
+        timer: 1500,
+        showConfirmButton: false
+      });
+  });
+       
     }
 
     const expenseCategories = ["Food", "Travel", "Shopping", "Bills", "Health", "Entertainment", "Other"];
